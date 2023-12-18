@@ -2,20 +2,19 @@
 
 import { revalidatePath } from "next/cache";
 
-import { connectToDatabase } from "../mogodb/database";
-
 import { handleError } from "@/lib/utils";
 
+import User from "../database/models/user.model";
+import Order from "../database/models/order.model";
+import Event from "../database/models/event.model";
 import { CreateUserParams, UpdateUserParams } from "@/types";
-import UserModel from "../mogodb/database/Models/user.model";
-import EventModel from "../mogodb/database/Models/event.model";
-import OrderModel from "../mogodb/database/Models/order.model";
+import { connectToDatabase } from "../database";
 
 export async function createUser(user: CreateUserParams) {
   try {
     await connectToDatabase();
 
-    const newUser = await UserModel.create(user);
+    const newUser = await User.create(user);
     return JSON.parse(JSON.stringify(newUser));
   } catch (error) {
     handleError(error);
@@ -26,7 +25,7 @@ export async function getUserById(userId: string) {
   try {
     await connectToDatabase();
 
-    const user = await UserModel.findById(userId);
+    const user = await User.findById(userId);
 
     if (!user) throw new Error("User not found");
     return JSON.parse(JSON.stringify(user));
@@ -39,7 +38,7 @@ export async function updateUser(clerkId: string, user: UpdateUserParams) {
   try {
     await connectToDatabase();
 
-    const updatedUser = await UserModel.findOneAndUpdate({ clerkId }, user, {
+    const updatedUser = await User.findOneAndUpdate({ clerkId }, user, {
       new: true,
     });
 
@@ -55,7 +54,7 @@ export async function deleteUser(clerkId: string) {
     await connectToDatabase();
 
     // Find user to delete
-    const userToDelete = await UserModel.findOne({ clerkId });
+    const userToDelete = await User.findOne({ clerkId });
 
     if (!userToDelete) {
       throw new Error("User not found");
@@ -64,20 +63,20 @@ export async function deleteUser(clerkId: string) {
     // Unlink relationships
     await Promise.all([
       // Update the 'events' collection to remove references to the user
-      EventModel.updateMany(
+      Event.updateMany(
         { _id: { $in: userToDelete.events } },
         { $pull: { organizer: userToDelete._id } }
       ),
 
       // Update the 'orders' collection to remove references to the user
-      OrderModel.updateMany(
+      Order.updateMany(
         { _id: { $in: userToDelete.orders } },
         { $unset: { buyer: 1 } }
       ),
     ]);
 
     // Delete user
-    const deletedUser = await UserModel.findByIdAndDelete(userToDelete._id);
+    const deletedUser = await User.findByIdAndDelete(userToDelete._id);
     revalidatePath("/");
 
     return deletedUser ? JSON.parse(JSON.stringify(deletedUser)) : null;
